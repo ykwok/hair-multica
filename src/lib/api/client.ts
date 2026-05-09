@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001/api";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
 
 interface ApiOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
@@ -13,6 +13,17 @@ class ApiError extends Error {
     super(message);
     this.name = "ApiError";
   }
+}
+
+interface ApiResponse<T> {
+  success: boolean;
+  data: T | null;
+  meta?: {
+    page?: number;
+    per_page?: number;
+    total?: number;
+  } | null;
+  error?: { code: string; message: string; details?: unknown } | null;
 }
 
 async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
@@ -51,7 +62,17 @@ async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
     return undefined as T;
   }
 
-  return response.json() as Promise<T>;
+  const json = (await response.json()) as ApiResponse<T>;
+
+  if (json.success === false) {
+    throw new ApiError(
+      json.error?.message || "请求失败",
+      response.status,
+      json.error
+    );
+  }
+
+  return json.data as T;
 }
 
 export const api = {

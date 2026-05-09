@@ -1,80 +1,68 @@
 export interface HairStyle {
   id: string;
   name: string;
-  category: "short" | "medium" | "long" | "curly" | "straight" | "bangs" | "celebrity";
-  thumbnailUrl: string;
-  popularity: number;
-  faceShapes?: string[];
-  tags?: string[];
+  category: string;
+  style?: string | null;
+  description?: string | null;
+  cover_image_url?: string | null;
+  tags: string[];
+  sort_order?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface HairstyleListResponse {
+  items: HairStyle[];
+  total: number;
 }
 
 export interface GenerateRequest {
-  imageUrl: string;
-  targetStyleId?: string;
-  customDescription?: string;
-  options?: {
-    preserveColor?: boolean;
-    intensity?: "light" | "medium" | "strong";
-  };
+  image_id: string;
+  hairstyle_id?: string | null;
+  custom_prompt?: string | null;
 }
 
 export interface GenerateResult {
   id: string;
-  originalImageUrl: string;
-  generatedImageUrl: string;
-  style?: HairStyle;
-  status: "pending" | "processing" | "completed" | "failed";
-  createdAt: string;
-  completedAt?: string;
+  image_id: string;
+  hairstyle_id?: string | null;
+  custom_prompt?: string | null;
+  result_image_url: string;
+  status: string;
+  created_at: string;
 }
 
 export interface AIComment {
   id: string;
-  resultId: string;
-  overallScore: number;
-  faceShape: string;
-  skinTone: string;
-  comments: {
-    category: "hairstyle" | "color" | "texture" | "overall";
-    title: string;
-    content: string;
-    emoji: string;
-  }[];
-  suggestions: string[];
-  createdAt: string;
-  radarScores?: {
-    faceShapeMatch: number;
-    hairTextureMatch: number;
-    styleVibe: number;
-    emotionalValue: number;
-    proKnowledge: number;
-    humorInteraction: number;
-  };
+  image_id: string;
+  hairstyle_id?: string | null;
+  comment_text: string;
+  rating?: number | null;
+  tags?: string[] | null;
+  created_at: string;
+}
+
+export interface AICommentRequest {
+  image_id: string;
+  hairstyle_id?: string | null;
+  hairstyle_info?: string | null;
 }
 
 export interface UploadResponse {
+  image_id: string;
   url: string;
-  key: string;
 }
 
 export interface UserProfile {
   id: string;
-  nickname: string;
-  avatarUrl?: string;
-  createdAt: string;
-  totalGenerations: number;
-  totalShares: number;
+  openid: string;
+  nickname?: string | null;
+  avatar_url?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface PaginationParams {
   page?: number;
-  pageSize?: number;
-}
-
-export interface PaginatedResponse<T> {
-  data: T[];
-  total: number;
-  page: number;
-  pageSize: number;
-  hasMore: boolean;
+  per_page?: number;
 }

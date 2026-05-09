@@ -7,38 +7,30 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Sparkles, ArrowRight, Wand2, MessageSquare, Scissors, Flame, Star, Loader2 } from "lucide-react";
+import { Sparkles, ArrowRight, Wand2, Flame, Star, Loader2 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { api } from "@/lib/api/client";
 import { toast } from "sonner";
 import { Loading } from "@/components/ui/loading";
 import { ErrorState } from "@/components/ui/error";
-import type { HairStyle, GenerateResult } from "@/lib/api/types";
+import type { HairStyle, HairstyleListResponse, GenerateResult } from "@/lib/api/types";
 
-const CATEGORY_TABS = [
-  { key: "all", label: "全部" },
-  { key: "short", label: "短发" },
-  { key: "medium", label: "中长发" },
-  { key: "long", label: "长发" },
-  { key: "curly", label: "卷发" },
-  { key: "straight", label: "直发" },
-  { key: "bangs", label: "刘海" },
-  { key: "celebrity", label: "明星同款" },
+const STYLE_TABS = [
+  { key: "all", label: "全部", query: undefined },
+  { key: "short", label: "短发", query: "short" },
+  { key: "medium", label: "中长发", query: "medium" },
+  { key: "long", label: "长发", query: "long" },
+  { key: "curly", label: "卷发", query: "curly" },
+  { key: "straight", label: "直发", query: "straight" },
 ];
 
 const MOCK_STYLES: HairStyle[] = [
-  { id: "1", name: "清爽短发", category: "short", thumbnailUrl: "", popularity: 95, faceShapes: ["圆脸", "鹅蛋脸"], tags: ["热门"] },
-  { id: "2", name: "波浪卷发", category: "curly", thumbnailUrl: "", popularity: 92, faceShapes: ["长脸", "方脸"], tags: ["推荐"] },
-  { id: "3", name: "中长发", category: "medium", thumbnailUrl: "", popularity: 88, faceShapes: ["鹅蛋脸", "心形脸"], tags: [] },
-  { id: "4", name: "黑长直", category: "long", thumbnailUrl: "", popularity: 85, faceShapes: ["鹅蛋脸", "长脸"], tags: [] },
-  { id: "5", name: "法式刘海", category: "bangs", thumbnailUrl: "", popularity: 90, faceShapes: ["圆脸", "方脸"], tags: ["新品"] },
-  { id: "6", name: "韩式卷发", category: "curly", thumbnailUrl: "", popularity: 87, faceShapes: ["鹅蛋脸", "圆脸"], tags: [] },
-  { id: "7", name: "一刀切", category: "short", thumbnailUrl: "", popularity: 93, faceShapes: ["方脸", "长脸"], tags: ["热门"] },
-  { id: "8", name: "羊毛卷", category: "curly", thumbnailUrl: "", popularity: 80, faceShapes: ["圆脸", "鹅蛋脸"], tags: [] },
-  { id: "9", name: "锁骨发", category: "medium", thumbnailUrl: "", popularity: 91, faceShapes: ["心形脸", "鹅蛋脸"], tags: ["推荐"] },
-  { id: "10", name: "空气刘海", category: "bangs", thumbnailUrl: "", popularity: 89, faceShapes: ["长脸", "心形脸"], tags: [] },
-  { id: "11", name: "高层次长发", category: "long", thumbnailUrl: "", popularity: 84, faceShapes: ["圆脸", "方脸"], tags: [] },
-  { id: "12", name: "Lisa 同款", category: "celebrity", thumbnailUrl: "", popularity: 96, faceShapes: ["鹅蛋脸", "圆脸"], tags: ["明星"] },
+  { id: "hs-001", name: "清爽短发", category: "male", style: "short", description: "干净利落，适合职场与日常", cover_image_url: "", tags: ["职场", "清爽"], sort_order: 1 },
+  { id: "hs-002", name: "微卷中长发", category: "female", style: "medium", description: "温柔浪漫，微卷增加发量感", cover_image_url: "", tags: ["浪漫", "温柔"], sort_order: 2 },
+  { id: "hs-003", name: "韩式刘海长发", category: "female", style: "long", description: "空气刘海搭配长直发，减龄又百搭", cover_image_url: "", tags: ["减龄", "百搭"], sort_order: 3 },
+  { id: "hs-004", name: "油头背头", category: "male", style: "short", description: "经典商务造型，气场全开", cover_image_url: "", tags: ["商务", "气场"], sort_order: 4 },
+  { id: "hs-005", name: "羊毛卷", category: "unisex", style: "curly", description: "蓬松羊毛卷，个性十足", cover_image_url: "", tags: ["潮流", "个性"], sort_order: 5 },
+  { id: "hs-006", name: "碎盖发型", category: "male", style: "short", description: "层次感碎盖，修饰脸型", cover_image_url: "", tags: ["少年感", "层次"], sort_order: 6 },
 ];
 
 function StyleThumbnail({ name }: { name: string }) {
@@ -54,9 +46,9 @@ function StyleThumbnail({ name }: { name: string }) {
 
 export default function GeneratePage() {
   const router = useRouter();
-  const { croppedImage, uploadedImageUrl, setSelectedStyle, setCustomDescription, setGenerateResult, decrementFreeCount, dailyFreeCount } = useAppStore();
+  const { croppedImage, uploadedImageUrl, imageId, setSelectedStyle, setCustomDescription, setGenerateResult, decrementFreeCount, dailyFreeCount } = useAppStore();
 
-  const [activeCategory, setActiveCategory] = useState("all");
+  const [activeTab, setActiveTab] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [customDesc, setCustomDesc] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -73,9 +65,14 @@ export default function GeneratePage() {
       setLoading(true);
       setError(null);
       try {
-        const res = await api.get<{ data: HairStyle[] }>("/v1/hairstyles", { params: { page: 1, pageSize: 50 } });
-        if (res.data && res.data.length > 0) {
-          setStyles(res.data);
+        const params: Record<string, string | number> = { page: 1, per_page: 50 };
+        const tab = STYLE_TABS.find((t) => t.key === activeTab);
+        if (tab?.query) {
+          params.style = tab.query;
+        }
+        const res = await api.get<HairstyleListResponse>("/hairstyles", { params });
+        if (res.items && res.items.length > 0) {
+          setStyles(res.items);
         }
       } catch {
         // Use mock data fallback
@@ -84,15 +81,13 @@ export default function GeneratePage() {
       }
     }
     loadStyles();
-  }, []);
+  }, [activeTab]);
 
   useEffect(() => {
     return () => {
       if (funIntervalRef.current) clearInterval(funIntervalRef.current);
     };
   }, []);
-
-  const filteredStyles = activeCategory === "all" ? styles : styles.filter((s) => s.category === activeCategory);
 
   const startFunMessages = () => {
     const messages = [
@@ -113,7 +108,7 @@ export default function GeneratePage() {
   };
 
   const handleGenerate = async () => {
-    if (!previewImage) {
+    if (!imageId && !previewImage) {
       toast.error("请先上传照片");
       router.push("/upload");
       return;
@@ -135,13 +130,13 @@ export default function GeneratePage() {
     if (customDesc.trim()) setCustomDescription(customDesc.trim());
 
     try {
-      const res = await api.post<GenerateResult>("/v1/generate-hairstyle", {
-        imageUrl: uploadedImageUrl || previewImage,
-        targetStyleId: selectedId ?? undefined,
-        customDescription: customDesc.trim() || undefined,
+      const res = await api.post<GenerateResult>("/generate-hairstyle", {
+        image_id: imageId || "local",
+        hairstyle_id: selectedId ?? undefined,
+        custom_prompt: customDesc.trim() || undefined,
       });
 
-      setGenerateResult(res.id, res.originalImageUrl, res.generatedImageUrl);
+      setGenerateResult(res.id, previewImage || res.result_image_url, res.result_image_url);
       decrementFreeCount();
       if (funIntervalRef.current) clearInterval(funIntervalRef.current);
       router.push("/result");
@@ -150,8 +145,8 @@ export default function GeneratePage() {
       await new Promise((r) => setTimeout(r, 3500));
       setGenerateResult(
         "mock-result-id",
-        previewImage,
-        previewImage
+        previewImage || "",
+        previewImage || ""
       );
       decrementFreeCount();
       if (funIntervalRef.current) clearInterval(funIntervalRef.current);
@@ -226,15 +221,15 @@ export default function GeneratePage() {
           </div>
         </div>
 
-        {/* Category tabs */}
+        {/* Style tabs */}
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-          {CATEGORY_TABS.map((tab) => (
+          {STYLE_TABS.map((tab) => (
             <Button
               key={tab.key}
-              variant={activeCategory === tab.key ? "default" : "outline"}
+              variant={activeTab === tab.key ? "default" : "outline"}
               size="sm"
               className="shrink-0 rounded-full text-xs"
-              onClick={() => setActiveCategory(tab.key)}
+              onClick={() => setActiveTab(tab.key)}
               disabled={generating}
             >
               {tab.label}
@@ -249,7 +244,7 @@ export default function GeneratePage() {
           <ErrorState message={error} onRetry={() => setLoading(true)} />
         ) : (
           <section className="grid grid-cols-2 gap-3">
-            {filteredStyles.map((style) => (
+            {styles.map((style) => (
               <Card
                 key={style.id}
                 className={`cursor-pointer transition-all ${
@@ -268,17 +263,15 @@ export default function GeneratePage() {
                   <div className="flex flex-col items-center gap-1">
                     <div className="flex items-center gap-1">
                       <span className="text-sm font-medium">{style.name}</span>
-                      {style.tags?.map((tag) => (
+                      {style.tags?.slice(0, 1).map((tag) => (
                         <Badge key={tag} variant="secondary" className="px-1 py-0 text-[10px]">
                           {tag}
                         </Badge>
                       ))}
                     </div>
-                    <div className="flex flex-wrap justify-center gap-1">
-                      {style.faceShapes?.map((shape) => (
-                        <span key={shape} className="text-muted-foreground text-[10px]">{shape}</span>
-                      ))}
-                    </div>
+                    {style.description && (
+                      <span className="text-muted-foreground line-clamp-1 text-center text-[10px]">{style.description}</span>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -295,7 +288,7 @@ export default function GeneratePage() {
         <Button
           className="h-12 w-full rounded-xl"
           size="lg"
-          disabled={(!selectedId && !customDesc.trim()) || generating || !previewImage}
+          disabled={(!selectedId && !customDesc.trim()) || generating || (!previewImage && !imageId)}
           onClick={handleGenerate}
         >
           {generating ? (

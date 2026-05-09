@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import Cropper from "react-easy-crop";
 import type { Area } from "react-easy-crop";
 import { Loading } from "@/components/ui/loading";
+import type { UploadResponse } from "@/lib/api/types";
 
 type Step = "select" | "preview" | "crop" | "uploading";
 
@@ -54,7 +55,7 @@ function createImage(url: string): Promise<HTMLImageElement> {
 
 export default function UploadPage() {
   const router = useRouter();
-  const { setUploadedImage, setCroppedImage, setUploadedImageUrl } = useAppStore();
+  const { setUploadedImage, setCroppedImage, setUploadedImageUrl, setImageId } = useAppStore();
 
   const [step, setStep] = useState<Step>("select");
   const [imageSrc, setImageSrc] = useState<string | null>(null);
@@ -108,8 +109,9 @@ export default function UploadPage() {
       formData.append("file", blob, "upload.jpg");
 
       try {
-        const res = await api.post<{ url: string; key: string }>("/v1/upload", formData);
+        const res = await api.post<UploadResponse>("/upload", formData);
         setUploadedImageUrl(res.url);
+        setImageId(res.image_id);
         setProgress(100);
         clearInterval(interval);
         toast.success("上传成功！");
@@ -118,6 +120,7 @@ export default function UploadPage() {
         clearInterval(interval);
         // Fallback: use cropped image as local URL for demo
         setUploadedImageUrl(cropped);
+        setImageId("local-" + Date.now());
         setProgress(100);
         toast.success("上传成功（本地模式）");
         setTimeout(() => router.push("/generate"), 600);
@@ -125,7 +128,7 @@ export default function UploadPage() {
     } catch {
       toast.error("裁剪失败，请重试");
     }
-  }, [imageSrc, croppedAreaPixels, setCroppedImage, setUploadedImageUrl, router]);
+  }, [imageSrc, croppedAreaPixels, setCroppedImage, setUploadedImageUrl, setImageId, router]);
 
   const reset = useCallback(() => {
     setStep("select");
@@ -133,12 +136,13 @@ export default function UploadPage() {
     setCroppedImage(null);
     setUploadedImage(null);
     setUploadedImageUrl(null);
+    setImageId(null);
     setProgress(0);
     setZoom(1);
     setCrop({ x: 0, y: 0 });
     if (cameraInputRef.current) cameraInputRef.current.value = "";
     if (galleryInputRef.current) galleryInputRef.current.value = "";
-  }, [setCroppedImage, setUploadedImage, setUploadedImageUrl]);
+  }, [setCroppedImage, setUploadedImage, setUploadedImageUrl, setImageId]);
 
   return (
     <MobileLayout>

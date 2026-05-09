@@ -21,10 +21,9 @@ import {
   Heart,
   Zap,
   BookOpen,
-  Loader2,
 } from "lucide-react";
 import { Loading } from "@/components/ui/loading";
-import type { AIComment } from "@/lib/api/types";
+import type { AIComment, AICommentRequest } from "@/lib/api/types";
 
 const PERSONALITIES: { key: Personality; label: string; icon: React.ElementType; color: string }[] = [
   { key: "gentle", label: "温柔闺蜜", icon: Heart, color: "text-rose-500" },
@@ -32,7 +31,7 @@ const PERSONALITIES: { key: Personality; label: string; icon: React.ElementType;
   { key: "knowledge", label: "知识型博主", icon: BookOpen, color: "text-sky-500" },
 ];
 
-const MOCK_COMMENTS: Record<Personality, AIComment> = {
+const MOCK_COMMENTS: Record<Personality, NonNullable<ReturnType<typeof useAppStore.getState>['aiComment']>> = {
   gentle: {
     id: "mock-1",
     resultId: "mock-result",
@@ -80,13 +79,47 @@ const MOCK_COMMENTS: Record<Personality, AIComment> = {
   },
 };
 
+function transformBackendComment(backend: AIComment, personality: Personality): NonNullable<ReturnType<typeof useAppStore.getState>['aiComment']> {
+  // Split comment_text into sections heuristically
+  const lines = backend.comment_text.split(/\n+/).filter((l) => l.trim());
+  const comments: NonNullable<ReturnType<typeof useAppStore.getState>['aiComment']>['comments'] = [];
+
+  if (lines.length >= 1) {
+    comments.push({ category: "overall", title: "造型点评", content: lines[0], emoji: "✨" });
+  }
+  if (lines.length >= 2) {
+    comments.push({ category: "hairstyle", title: "脸型匹配", content: lines[1], emoji: "🎭" });
+  }
+  if (lines.length >= 3) {
+    comments.push({ category: "texture", title: "专业建议", content: lines.slice(2).join("\n"), emoji: "💡" });
+  }
+
+  if (comments.length === 0) {
+    comments.push({ category: "overall", title: "造型点评", content: backend.comment_text || "AI 造型师给出了精彩点评", emoji: "✨" });
+  }
+
+  const base = MOCK_COMMENTS[personality];
+  return {
+    id: backend.id,
+    resultId: backend.image_id,
+    overallScore: backend.rating ? Math.min(100, backend.rating * 10) : base.overallScore,
+    faceShape: base.faceShape,
+    skinTone: base.skinTone,
+    comments,
+    suggestions: backend.tags && backend.tags.length > 0 ? backend.tags : base.suggestions,
+    createdAt: backend.created_at,
+    radarScores: base.radarScores,
+  };
+}
+
 export default function ResultPage() {
   const router = useRouter();
   const {
     generatedImageUrl,
     originalImageUrl,
     selectedStyleName,
-    generateResultId,
+    imageId,
+    selectedStyleId,
     aiComment,
     personality,
     setAiComment,
@@ -98,21 +131,16 @@ export default function ResultPage() {
 
   useEffect(() => {
     async function loadComment() {
-      if (!generateResultId || aiComment) return;
+      if (!imageId || aiComment) return;
       setLoadingComment(true);
       try {
-        const res = await api.post<AIComment>("/v1/ai-comment", { resultId: generateResultId });
-        setAiComment({
-          ...res,
-          radarScores: res.radarScores ?? {
-            faceShapeMatch: 90,
-            hairTextureMatch: 85,
-            styleVibe: 88,
-            emotionalValue: 82,
-            proKnowledge: 80,
-            humorInteraction: 75,
-          },
-        });
+        const body: AICommentRequest = {
+          image_id: imageId,
+          hairstyle_id: selectedStyleId ?? undefined,
+          hairstyle_info: selectedStyleName ?? undefined,
+        };
+        const res = await api.post<AIComment>("/ai-comment", body);
+        setAiComment(transformBackendComment(res, activePersonality));
       } catch {
         setAiComment(MOCK_COMMENTS[activePersonality]);
       } finally {
@@ -120,7 +148,7 @@ export default function ResultPage() {
       }
     }
     loadComment();
-  }, [generateResultId, aiComment, setAiComment, activePersonality]);
+  }, [imageId, selectedStyleId, selectedStyleName, aiComment, setAiComment, activePersonality]);
 
   const handlePersonalityChange = (p: Personality) => {
     setActivePersonality(p);

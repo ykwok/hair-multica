@@ -55,10 +55,15 @@ class Hairstyle(Base):
     id = Column(String(36), primary_key=True, default=_uuid)
     name = Column(String(128), nullable=False)
     category = Column(String(64), nullable=False, index=True)  # male, female, unisex
-    style = Column(String(64), nullable=True)  # short, medium, long, curly, straight
+    style = Column(String(64), nullable=True, index=True)  # straight, curly, braid, dye
+    length = Column(String(32), nullable=True, index=True)  # short, medium, long
+    scene = Column(String(32), nullable=True, index=True)  # daily, work, date, party
     description = Column(Text, nullable=True)
     cover_image_url = Column(String(512), nullable=True)
+    thumbnail_url = Column(String(512), nullable=True)
     tags = Column(Text, nullable=True)  # JSON array string
+    face_type_suitability = Column(Text, nullable=True)  # JSON array string, e.g. ["oval", "round"]
+    prompt_for_generation = Column(Text, nullable=True)  # English prompt for SDXL
     sort_order = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -100,7 +105,11 @@ class AIComment(Base):
     image_id = Column(String(36), nullable=False, index=True)
     hairstyle_id = Column(String(36), nullable=True, index=True)
     hairstyle_info = Column(Text, nullable=True)
+    personality = Column(String(32), nullable=True)  # warm_bestie, sassy_stylist, knowledge_blogger
     comment_text = Column(Text, nullable=False)
-    rating = Column(Integer, nullable=True)  # 1-10
+    scores = Column(Text, nullable=True)  # JSON string for six-dimension scores
+    rating = Column(Integer, nullable=True)  # 1-10 overall rating
+    highlights = Column(Text, nullable=True)  # JSON array string
+    tip = Column(Text, nullable=True)
     tags = Column(Text, nullable=True)  # JSON array string
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

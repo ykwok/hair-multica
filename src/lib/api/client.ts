@@ -65,11 +65,7 @@ async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const json = (await response.json()) as ApiResponse<T>;
 
   if (json.success === false) {
-    throw new ApiError(
-      json.error?.message || "请求失败",
-      response.status,
-      json.error
-    );
+    throw new ApiError(json.error?.message || "请求失败", response.status, json.error);
   }
 
   return json.data as T;
@@ -91,6 +87,25 @@ export const api = {
     }),
   del: <T>(path: string, options?: ApiOptions) =>
     request<T>(path, { ...options, method: "DELETE" }),
+  /** Poll a task endpoint until it reaches a terminal state. */
+  poll: async <T>(
+    path: string,
+    options?: ApiOptions & {
+      interval?: number;
+      maxAttempts?: number;
+      isComplete?: (data: T) => boolean;
+    }
+  ): Promise<T> => {
+    const { interval = 2000, maxAttempts = 60, isComplete, ...rest } = options ?? {};
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const data = await request<T>(path, { ...rest, method: "GET" });
+      if (isComplete ? isComplete(data) : true) {
+        return data;
+      }
+      await new Promise((r) => setTimeout(r, interval));
+    }
+    throw new ApiError("轮询超时", 408);
+  },
 };
 
 export { ApiError };

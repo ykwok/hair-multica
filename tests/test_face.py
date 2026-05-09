@@ -1,7 +1,6 @@
 """Face analysis endpoint tests."""
 
 import io
-import json
 
 
 def test_analyze_face(client):

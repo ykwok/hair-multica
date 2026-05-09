@@ -4,7 +4,16 @@ import { MobileLayout } from "@/components/layout/mobile-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Wand2, MessageCircle, ChevronRight, Flame, Star, TrendingUp, Users } from "lucide-react";
+import {
+  Sparkles,
+  Wand2,
+  MessageCircle,
+  ChevronRight,
+  Flame,
+  Star,
+  TrendingUp,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { useAppStore } from "@/lib/store";
 
@@ -98,12 +107,14 @@ export default function HomePage() {
               查看更多
             </Link>
           </div>
-          <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
+          <div className="scrollbar-hide flex gap-3 overflow-x-auto pb-1">
             {HOT_STYLES.map((style) => (
               <Link key={style.id} href="/generate" className="shrink-0">
                 <Card className="w-24 cursor-pointer transition-shadow hover:shadow-md">
                   <CardContent className="flex flex-col items-center gap-2 p-3">
-                    <div className={`flex h-12 w-12 items-center justify-center rounded-full text-sm font-bold ${style.color}`}>
+                    <div
+                      className={`flex h-12 w-12 items-center justify-center rounded-full text-sm font-bold ${style.color}`}
+                    >
                       {style.name.slice(0, 1)}
                     </div>
                     <span className="text-xs font-medium">{style.name}</span>
@@ -136,7 +147,7 @@ export default function HomePage() {
                     <span className="text-xs font-medium">{work.name}</span>
                     <span className="text-muted-foreground text-[10px]">{work.style}</span>
                     <div className="flex items-center gap-0.5">
-                      <Star className="fill-amber-400 text-amber-400 h-3 w-3" />
+                      <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
                       <span className="text-[10px] text-gray-500">{work.likes}</span>
                     </div>
                   </div>

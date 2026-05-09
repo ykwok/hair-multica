@@ -32,12 +32,32 @@ export interface GenerateResult {
   created_at: string;
 }
 
+export interface GenerateTaskResponse {
+  task_id: string;
+  status: string;
+}
+
+export interface TaskStatus {
+  task_id: string;
+  task_type: string;
+  status: string; // pending, running, success, failed
+  result?: GenerateResult | null;
+  result_url?: string | null;
+  error_message?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AIComment {
   id: string;
   image_id: string;
   hairstyle_id?: string | null;
   comment_text: string;
+  personality?: string | null;
+  scores?: Record<string, number> | null;
   rating?: number | null;
+  highlights?: string[] | null;
+  tip?: string | null;
   tags?: string[] | null;
   created_at: string;
 }
@@ -46,6 +66,7 @@ export interface AICommentRequest {
   image_id: string;
   hairstyle_id?: string | null;
   hairstyle_info?: string | null;
+  personality_type?: string; // warm_bestie | sassy_stylist | knowledge_blogger
 }
 
 export interface UploadResponse {
@@ -60,6 +81,17 @@ export interface UserProfile {
   avatar_url?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface FaceAnalysisResponse {
+  id: string;
+  image_id: string;
+  face_shape?: string | null;
+  forehead_width?: number | null;
+  cheekbone_width?: number | null;
+  jawline_width?: number | null;
+  face_length?: number | null;
+  features?: Record<string, unknown> | null;
 }
 
 export interface PaginationParams {

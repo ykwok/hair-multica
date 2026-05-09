@@ -53,17 +53,5 @@ class Settings(BaseSettings):
     volcengine_image_model: str = "doubao-image"
     volcengine_text_model: str = "doubao-vision-pro"
 
-    # Aliyun (通义万相)
-    aliyun_api_key: str = ""
-    aliyun_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    aliyun_image_model: str = "wanx-v1"
-    aliyun_text_model: str = "qwen-vl-max"
-
-    # VolcEngine (豆包)
-    volcengine_api_key: str = ""
-    volcengine_base_url: str = "https://ark.cn-beijing.volces.com/api/v3"
-    volcengine_image_model: str = "doubao-image"
-    volcengine_text_model: str = "doubao-vision-pro"
-
 
 settings = Settings()

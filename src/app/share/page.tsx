@@ -75,7 +75,7 @@ export default function SharePage() {
   if (!generatedImageUrl) {
     return (
       <MobileLayout>
-        <div className="flex flex-col items-center justify-center gap-4 py-20 px-4">
+        <div className="flex flex-col items-center justify-center gap-4 px-4 py-20">
           <Sparkles className="text-muted-foreground h-12 w-12" />
           <p className="text-muted-foreground text-sm">还没有生成结果</p>
           <Button className="rounded-xl" onClick={() => router.push("/upload")}>
@@ -90,7 +90,12 @@ export default function SharePage() {
     <MobileLayout>
       <div className="flex flex-col gap-5 p-4">
         <section className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => router.push("/result")}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-full"
+            onClick={() => router.push("/result")}
+          >
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex flex-col gap-1">
@@ -171,7 +176,7 @@ export default function SharePage() {
                 <span className="text-xs text-gray-500">扫码体验同款</span>
               </div>
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100">
-                <Sparkles className="text-gray-400 h-5 w-5" />
+                <Sparkles className="h-5 w-5 text-gray-400" />
               </div>
             </div>
           </div>
@@ -208,10 +213,18 @@ export default function SharePage() {
             onClick={handleCapture}
             disabled={capturing}
           >
-            {saved ? <Check className="h-5 w-5 text-green-600" /> : <Download className="h-5 w-5" />}
+            {saved ? (
+              <Check className="h-5 w-5 text-green-600" />
+            ) : (
+              <Download className="h-5 w-5" />
+            )}
             <span className="text-xs">{saved ? "已保存" : "保存图片"}</span>
           </Button>
-          <Button variant="outline" className="h-auto flex-col gap-1 rounded-xl py-3" onClick={handleCopyLink}>
+          <Button
+            variant="outline"
+            className="h-auto flex-col gap-1 rounded-xl py-3"
+            onClick={handleCopyLink}
+          >
             <Copy className="h-5 w-5" />
             <span className="text-xs">复制链接</span>
           </Button>

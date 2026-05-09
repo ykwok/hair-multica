@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import Cropper from "react-easy-crop";
 import type { Area } from "react-easy-crop";
 import { Loading } from "@/components/ui/loading";
-import type { UploadResponse } from "@/lib/api/types";
+import type { UploadResponse, FaceAnalysisResponse } from "@/lib/api/types";
 
 type Step = "select" | "preview" | "crop" | "uploading";
 
@@ -55,7 +55,8 @@ function createImage(url: string): Promise<HTMLImageElement> {
 
 export default function UploadPage() {
   const router = useRouter();
-  const { setUploadedImage, setCroppedImage, setUploadedImageUrl, setImageId } = useAppStore();
+  const { setUploadedImage, setCroppedImage, setUploadedImageUrl, setImageId, setFaceAnalysis } =
+    useAppStore();
 
   const [step, setStep] = useState<Step>("select");
   const [imageSrc, setImageSrc] = useState<string | null>(null);
@@ -68,22 +69,25 @@ export default function UploadPage() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
 
-  const onFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("请上传图片文件");
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("图片大小不能超过 10MB");
-      return;
-    }
-    const dataUrl = await readFile(file);
-    setImageSrc(dataUrl);
-    setUploadedImage(dataUrl);
-    setStep("preview");
-  }, [setUploadedImage]);
+  const onFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (!file.type.startsWith("image/")) {
+        toast.error("请上传图片文件");
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error("图片大小不能超过 10MB");
+        return;
+      }
+      const dataUrl = await readFile(file);
+      setImageSrc(dataUrl);
+      setUploadedImage(dataUrl);
+      setStep("preview");
+    },
+    [setUploadedImage]
+  );
 
   const handleCrop = useCallback(async () => {
     if (!imageSrc || !croppedAreaPixels) return;
@@ -112,6 +116,24 @@ export default function UploadPage() {
         const res = await api.post<UploadResponse>("/upload", formData);
         setUploadedImageUrl(res.url);
         setImageId(res.image_id);
+
+        // Trigger face analysis in background
+        try {
+          const faceRes = await api.post<FaceAnalysisResponse>("/analyze-face", {
+            image_id: res.image_id,
+          });
+          setFaceAnalysis({
+            face_shape: faceRes.face_shape,
+            forehead_width: faceRes.forehead_width,
+            cheekbone_width: faceRes.cheekbone_width,
+            jawline_width: faceRes.jawline_width,
+            face_length: faceRes.face_length,
+            features: faceRes.features,
+          });
+        } catch {
+          // Face analysis failure is non-blocking
+        }
+
         setProgress(100);
         clearInterval(interval);
         toast.success("上传成功！");
@@ -222,11 +244,7 @@ export default function UploadPage() {
                 </div>
               ) : (
                 <div className="relative">
-                  <img
-                    src={imageSrc}
-                    alt="Preview"
-                    className="h-auto w-full object-contain"
-                  />
+                  <img src={imageSrc} alt="Preview" className="h-auto w-full object-contain" />
                   {/* Face guide overlay */}
                   <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                     <div className="border-primary/40 h-48 w-36 rounded-full border-2 border-dashed" />
@@ -273,7 +291,11 @@ export default function UploadPage() {
                 </>
               ) : (
                 <>
-                  <Button variant="outline" className="h-12 flex-1 rounded-xl" onClick={() => setStep("preview")}>
+                  <Button
+                    variant="outline"
+                    className="h-12 flex-1 rounded-xl"
+                    onClick={() => setStep("preview")}
+                  >
                     <RotateCcw className="mr-2 h-5 w-5" />
                     返回
                   </Button>
@@ -297,7 +319,9 @@ export default function UploadPage() {
                   style={{ width: `${progress}%` }}
                 />
               </div>
-              <p className="text-muted-foreground mt-2 text-center text-xs">{Math.round(progress)}%</p>
+              <p className="text-muted-foreground mt-2 text-center text-xs">
+                {Math.round(progress)}%
+              </p>
             </div>
           </div>
         )}

@@ -4,12 +4,13 @@ import asyncio
 import base64
 import json
 import uuid
-from typing import Any, Coroutine
+from collections.abc import Coroutine
+from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.models import GenerationTask, GenerateResult
+from app.models import GenerateResult, GenerationTask
 from app.services.llm import get_llm_provider
 from app.services.storage import get_storage_provider
 

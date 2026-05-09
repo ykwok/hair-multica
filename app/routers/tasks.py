@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import GenerationTask, GenerateResult
-from app.schemas import GenerateResultOut, TaskStatusOut, success_response
+from app.models import GenerateResult, GenerationTask
+from app.schemas import GenerateResultOut, success_response
 
 router = APIRouter(prefix="/api/v1", tags=["Tasks"])
 

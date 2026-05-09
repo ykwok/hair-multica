@@ -22,16 +22,13 @@ export function ComparisonSlider({
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const handleMove = useCallback(
-    (clientX: number) => {
-      if (!containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      const x = clientX - rect.left;
-      const percent = Math.max(0, Math.min(100, (x / rect.width) * 100));
-      setSliderPosition(percent);
-    },
-    []
-  );
+  const handleMove = useCallback((clientX: number) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const percent = Math.max(0, Math.min(100, (x / rect.width) * 100));
+    setSliderPosition(percent);
+  }, []);
 
   const onMouseDown = useCallback(() => setIsDragging(true), []);
   const onMouseUp = useCallback(() => setIsDragging(false), []);
@@ -52,7 +49,7 @@ export function ComparisonSlider({
   return (
     <div
       ref={containerRef}
-      className={cn("relative select-none overflow-hidden rounded-xl", className)}
+      className={cn("relative overflow-hidden rounded-xl select-none", className)}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
       onMouseLeave={onMouseUp}
@@ -60,12 +57,7 @@ export function ComparisonSlider({
       onTouchEnd={onMouseUp}
     >
       {/* After image (full width) */}
-      <img
-        src={afterImage}
-        alt="After"
-        className="h-64 w-full object-cover"
-        draggable={false}
-      />
+      <img src={afterImage} alt="After" className="h-64 w-full object-cover" draggable={false} />
 
       {/* Before image (clipped) */}
       <div
@@ -84,7 +76,7 @@ export function ComparisonSlider({
       <div className="absolute top-3 left-3 rounded-md bg-black/50 px-2 py-1 text-xs text-white">
         {beforeLabel}
       </div>
-      <div className="absolute top-3 right-3 rounded-md bg-primary/80 px-2 py-1 text-xs text-white">
+      <div className="bg-primary/80 absolute top-3 right-3 rounded-md px-2 py-1 text-xs text-white">
         {afterLabel}
       </div>
 

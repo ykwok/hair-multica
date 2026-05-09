@@ -44,7 +44,9 @@ export function RadarChart({ scores, size = 200 }: RadarChartProps) {
     return <polygon key={i} points={points} fill="none" stroke="#e2e8f0" strokeWidth="1" />;
   });
 
-  const dataPoints = LABELS.map((item, idx) => getPoint(idx, scores[item.key as keyof typeof scores]));
+  const dataPoints = LABELS.map((item, idx) =>
+    getPoint(idx, scores[item.key as keyof typeof scores])
+  );
   const dataPolygon = dataPoints.map((p) => `${p.x},${p.y}`).join(" ");
 
   return (
@@ -67,7 +69,12 @@ export function RadarChart({ scores, size = 200 }: RadarChartProps) {
         );
       })}
       {/* Data area */}
-      <polygon points={dataPolygon} fill="rgba(224, 108, 92, 0.2)" stroke="#e06c5c" strokeWidth="2" />
+      <polygon
+        points={dataPolygon}
+        fill="rgba(224, 108, 92, 0.2)"
+        stroke="#e06c5c"
+        strokeWidth="2"
+      />
       {/* Data points */}
       {dataPoints.map((p, idx) => (
         <circle key={idx} cx={p.x} cy={p.y} r="3" fill="#e06c5c" />

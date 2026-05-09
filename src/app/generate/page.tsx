@@ -13,7 +13,12 @@ import { api } from "@/lib/api/client";
 import { toast } from "sonner";
 import { Loading } from "@/components/ui/loading";
 import { ErrorState } from "@/components/ui/error";
-import type { HairStyle, HairstyleListResponse, GenerateResult } from "@/lib/api/types";
+import type {
+  HairStyle,
+  HairstyleListResponse,
+  GenerateTaskResponse,
+  TaskStatus,
+} from "@/lib/api/types";
 
 const STYLE_TABS = [
   { key: "all", label: "全部", query: undefined },
@@ -25,20 +30,83 @@ const STYLE_TABS = [
 ];
 
 const MOCK_STYLES: HairStyle[] = [
-  { id: "hs-001", name: "清爽短发", category: "male", style: "short", description: "干净利落，适合职场与日常", cover_image_url: "", tags: ["职场", "清爽"], sort_order: 1 },
-  { id: "hs-002", name: "微卷中长发", category: "female", style: "medium", description: "温柔浪漫，微卷增加发量感", cover_image_url: "", tags: ["浪漫", "温柔"], sort_order: 2 },
-  { id: "hs-003", name: "韩式刘海长发", category: "female", style: "long", description: "空气刘海搭配长直发，减龄又百搭", cover_image_url: "", tags: ["减龄", "百搭"], sort_order: 3 },
-  { id: "hs-004", name: "油头背头", category: "male", style: "short", description: "经典商务造型，气场全开", cover_image_url: "", tags: ["商务", "气场"], sort_order: 4 },
-  { id: "hs-005", name: "羊毛卷", category: "unisex", style: "curly", description: "蓬松羊毛卷，个性十足", cover_image_url: "", tags: ["潮流", "个性"], sort_order: 5 },
-  { id: "hs-006", name: "碎盖发型", category: "male", style: "short", description: "层次感碎盖，修饰脸型", cover_image_url: "", tags: ["少年感", "层次"], sort_order: 6 },
+  {
+    id: "hs-001",
+    name: "清爽短发",
+    category: "male",
+    style: "short",
+    description: "干净利落，适合职场与日常",
+    cover_image_url: "",
+    tags: ["职场", "清爽"],
+    sort_order: 1,
+  },
+  {
+    id: "hs-002",
+    name: "微卷中长发",
+    category: "female",
+    style: "medium",
+    description: "温柔浪漫，微卷增加发量感",
+    cover_image_url: "",
+    tags: ["浪漫", "温柔"],
+    sort_order: 2,
+  },
+  {
+    id: "hs-003",
+    name: "韩式刘海长发",
+    category: "female",
+    style: "long",
+    description: "空气刘海搭配长直发，减龄又百搭",
+    cover_image_url: "",
+    tags: ["减龄", "百搭"],
+    sort_order: 3,
+  },
+  {
+    id: "hs-004",
+    name: "油头背头",
+    category: "male",
+    style: "short",
+    description: "经典商务造型，气场全开",
+    cover_image_url: "",
+    tags: ["商务", "气场"],
+    sort_order: 4,
+  },
+  {
+    id: "hs-005",
+    name: "羊毛卷",
+    category: "unisex",
+    style: "curly",
+    description: "蓬松羊毛卷，个性十足",
+    cover_image_url: "",
+    tags: ["潮流", "个性"],
+    sort_order: 5,
+  },
+  {
+    id: "hs-006",
+    name: "碎盖发型",
+    category: "male",
+    style: "short",
+    description: "层次感碎盖，修饰脸型",
+    cover_image_url: "",
+    tags: ["少年感", "层次"],
+    sort_order: 6,
+  },
 ];
 
 function StyleThumbnail({ name }: { name: string }) {
   const initials = name.slice(0, 1);
-  const colors = ["bg-rose-100 text-rose-600", "bg-amber-100 text-amber-600", "bg-emerald-100 text-emerald-600", "bg-sky-100 text-sky-600", "bg-violet-100 text-violet-600", "bg-pink-100 text-pink-600"];
+  const colors = [
+    "bg-rose-100 text-rose-600",
+    "bg-amber-100 text-amber-600",
+    "bg-emerald-100 text-emerald-600",
+    "bg-sky-100 text-sky-600",
+    "bg-violet-100 text-violet-600",
+    "bg-pink-100 text-pink-600",
+  ];
   const color = colors[name.charCodeAt(0) % colors.length];
   return (
-    <div className={`flex h-14 w-14 items-center justify-center rounded-full text-lg font-bold ${color}`}>
+    <div
+      className={`flex h-14 w-14 items-center justify-center rounded-full text-lg font-bold ${color}`}
+    >
       {initials}
     </div>
   );
@@ -46,7 +114,16 @@ function StyleThumbnail({ name }: { name: string }) {
 
 export default function GeneratePage() {
   const router = useRouter();
-  const { croppedImage, uploadedImageUrl, imageId, setSelectedStyle, setCustomDescription, setGenerateResult, decrementFreeCount, dailyFreeCount } = useAppStore();
+  const {
+    croppedImage,
+    uploadedImageUrl,
+    imageId,
+    setSelectedStyle,
+    setCustomDescription,
+    setGenerateResult,
+    decrementFreeCount,
+    dailyFreeCount,
+  } = useAppStore();
 
   const [activeTab, setActiveTab] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -57,6 +134,7 @@ export default function GeneratePage() {
   const [error, setError] = useState<string | null>(null);
   const [funMessages, setFunMessages] = useState<string[]>([]);
   const funIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortRef = useRef(false);
 
   const previewImage = croppedImage || uploadedImageUrl;
 
@@ -86,6 +164,7 @@ export default function GeneratePage() {
   useEffect(() => {
     return () => {
       if (funIntervalRef.current) clearInterval(funIntervalRef.current);
+      abortRef.current = true;
     };
   }, []);
 
@@ -123,6 +202,7 @@ export default function GeneratePage() {
     }
 
     setGenerating(true);
+    abortRef.current = false;
     startFunMessages();
 
     const style = styles.find((s) => s.id === selectedId);
@@ -130,24 +210,36 @@ export default function GeneratePage() {
     if (customDesc.trim()) setCustomDescription(customDesc.trim());
 
     try {
-      const res = await api.post<GenerateResult>("/generate-hairstyle", {
+      // Step 1: Create async task
+      const taskRes = await api.post<GenerateTaskResponse>("/generate-hairstyle", {
         image_id: imageId || "local",
         hairstyle_id: selectedId ?? undefined,
         custom_prompt: customDesc.trim() || undefined,
       });
 
-      setGenerateResult(res.id, previewImage || res.result_image_url, res.result_image_url);
+      // Step 2: Poll task status
+      const task = await api.poll<TaskStatus>(`/tasks/${taskRes.task_id}`, {
+        interval: 2000,
+        maxAttempts: 120,
+        isComplete: (data) => data.status === "success" || data.status === "failed",
+      });
+
+      if (abortRef.current) return;
+
+      if (task.status === "failed") {
+        throw new Error(task.error_message || "生成失败");
+      }
+
+      const resultUrl = task.result?.result_image_url || task.result_url || "";
+      setGenerateResult(task.result?.id || taskRes.task_id, previewImage || resultUrl, resultUrl);
       decrementFreeCount();
       if (funIntervalRef.current) clearInterval(funIntervalRef.current);
       router.push("/result");
     } catch {
+      if (abortRef.current) return;
       // Mock fallback
       await new Promise((r) => setTimeout(r, 3500));
-      setGenerateResult(
-        "mock-result-id",
-        previewImage || "",
-        previewImage || ""
-      );
+      setGenerateResult("mock-result-id", previewImage || "", previewImage || "");
       decrementFreeCount();
       if (funIntervalRef.current) clearInterval(funIntervalRef.current);
       router.push("/result");
@@ -172,13 +264,19 @@ export default function GeneratePage() {
                 </div>
                 <div className="flex flex-col items-center gap-1">
                   {funMessages.slice(-1).map((msg, i) => (
-                    <p key={i} className="text-muted-foreground animate-pulse text-sm">{msg}</p>
+                    <p key={i} className="text-muted-foreground animate-pulse text-sm">
+                      {msg}
+                    </p>
                   ))}
                 </div>
               </div>
             ) : previewImage ? (
               <div className="relative">
-                <img src={previewImage} alt="Uploaded" className="h-40 w-40 rounded-xl object-cover" />
+                <img
+                  src={previewImage}
+                  alt="Uploaded"
+                  className="h-40 w-40 rounded-xl object-cover"
+                />
                 <Badge className="absolute top-2 right-2 bg-black/60 text-white">原图</Badge>
               </div>
             ) : (
@@ -187,7 +285,12 @@ export default function GeneratePage() {
                   <Wand2 className="text-muted-foreground h-8 w-8" />
                 </div>
                 <p className="text-muted-foreground text-sm">请先上传照片</p>
-                <Button variant="outline" size="sm" className="rounded-lg" onClick={() => router.push("/upload")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-lg"
+                  onClick={() => router.push("/upload")}
+                >
                   去上传
                 </Button>
               </>
@@ -222,7 +325,7 @@ export default function GeneratePage() {
         </div>
 
         {/* Style tabs */}
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        <div className="scrollbar-hide flex gap-2 overflow-x-auto pb-1">
           {STYLE_TABS.map((tab) => (
             <Button
               key={tab.key}
@@ -270,7 +373,9 @@ export default function GeneratePage() {
                       ))}
                     </div>
                     {style.description && (
-                      <span className="text-muted-foreground line-clamp-1 text-center text-[10px]">{style.description}</span>
+                      <span className="text-muted-foreground line-clamp-1 text-center text-[10px]">
+                        {style.description}
+                      </span>
                     )}
                   </div>
                 </CardContent>
@@ -288,7 +393,9 @@ export default function GeneratePage() {
         <Button
           className="h-12 w-full rounded-xl"
           size="lg"
-          disabled={(!selectedId && !customDesc.trim()) || generating || (!previewImage && !imageId)}
+          disabled={
+            (!selectedId && !customDesc.trim()) || generating || (!previewImage && !imageId)
+          }
           onClick={handleGenerate}
         >
           {generating ? (

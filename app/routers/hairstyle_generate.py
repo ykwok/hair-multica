@@ -4,9 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import GenerateResult, Hairstyle, Image
-from app.schemas import GenerateHairstyleRequest, GenerateResultOut, success_response
-from app.services.llm import get_llm_provider
+from app.models import Hairstyle, Image
+from app.schemas import GenerateHairstyleRequest, success_response
 from app.services.storage import get_storage_provider
 from app.services.task_manager import task_manager
 

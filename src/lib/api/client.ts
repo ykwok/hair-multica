@@ -27,10 +27,12 @@ async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
     if (search.toString()) url += `?${search.toString()}`;
   }
 
+  const isFormData = init.body instanceof FormData;
+
   const response = await fetch(url, {
     ...init,
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...init.headers,
     },
   });
@@ -58,7 +60,7 @@ export const api = {
     request<T>(path, {
       ...options,
       method: "POST",
-      body: body ? JSON.stringify(body) : undefined,
+      body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
     }),
   put: <T>(path: string, body?: unknown, options?: ApiOptions) =>
     request<T>(path, {

@@ -1,14 +1,17 @@
 export interface HairStyle {
   id: string;
   name: string;
-  category: "short" | "medium" | "long" | "curly" | "straight";
+  category: "short" | "medium" | "long" | "curly" | "straight" | "bangs" | "celebrity";
   thumbnailUrl: string;
   popularity: number;
+  faceShapes?: string[];
+  tags?: string[];
 }
 
 export interface GenerateRequest {
   imageUrl: string;
-  targetStyleId: string;
+  targetStyleId?: string;
+  customDescription?: string;
   options?: {
     preserveColor?: boolean;
     intensity?: "light" | "medium" | "strong";
@@ -19,7 +22,7 @@ export interface GenerateResult {
   id: string;
   originalImageUrl: string;
   generatedImageUrl: string;
-  style: HairStyle;
+  style?: HairStyle;
   status: "pending" | "processing" | "completed" | "failed";
   createdAt: string;
   completedAt?: string;
@@ -32,13 +35,21 @@ export interface AIComment {
   faceShape: string;
   skinTone: string;
   comments: {
-    category: " hairstyle" | "color" | "texture" | "overall";
+    category: "hairstyle" | "color" | "texture" | "overall";
     title: string;
     content: string;
     emoji: string;
   }[];
   suggestions: string[];
   createdAt: string;
+  radarScores?: {
+    faceShapeMatch: number;
+    hairTextureMatch: number;
+    styleVibe: number;
+    emotionalValue: number;
+    proKnowledge: number;
+    humorInteraction: number;
+  };
 }
 
 export interface UploadResponse {

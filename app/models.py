@@ -78,6 +78,20 @@ class GenerateResult(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class GenerationTask(Base):
+    __tablename__ = "generation_tasks"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    task_type = Column(String(32), nullable=False, default="generate")  # generate, analyze
+    status = Column(String(32), default="pending", nullable=False)  # pending, running, success, failed
+    params = Column(Text, nullable=True)  # JSON string of request params
+    result_id = Column(String(36), nullable=True, index=True)  # references generate_results.id or face_analyses.id
+    result_url = Column(String(512), nullable=True)  # direct result URL for convenience
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
 class AIComment(Base):
     __tablename__ = "ai_comments"
 

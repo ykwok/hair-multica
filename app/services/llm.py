@@ -1,5 +1,6 @@
 """LLM provider abstraction layer."""
 
+import base64
 import json
 import os
 from abc import ABC, abstractmethod
@@ -99,7 +100,6 @@ class OpenAICompatibleProvider(LLMProvider):
                 "features": {"skin_tone": "medium", "eye_shape": "almond"},
             })
 
-        import base64
         b64_image = base64.b64encode(image_data).decode("utf-8")
         # Determine mime type roughly
         mime = "image/jpeg"
@@ -134,11 +134,191 @@ class OpenAICompatibleProvider(LLMProvider):
             return data["choices"][0]["message"]["content"]
 
 
+class FalAIProvider(LLMProvider):
+    """fal.ai provider for SDXL + InstantID high-quality image generation."""
+
+    BASE_URL = "https://queue.fal.run"
+    POLL_INTERVAL = 2.0
+
+    def __init__(self, api_key: str, model_id: str, preview_model_id: str, timeout: int = 120) -> None:
+        self.api_key = api_key
+        self.model_id = model_id
+        self.preview_model_id = preview_model_id
+        self.timeout = timeout
+        self.headers = {
+            "Authorization": f"Key {api_key}",
+            "Content-Type": "application/json",
+        }
+
+    def _detect_mime(self, image_data: bytes) -> str:
+        if image_data[:8] == b"\x89PNG\r\n\x1a\n":
+            return "image/png"
+        elif image_data[:3] == b"GIF":
+            return "image/gif"
+        elif image_data[:2] == b"BM":
+            return "image/bmp"
+        return "image/jpeg"
+
+    async def _submit(self, model_path: str, payload: dict[str, Any]) -> str:
+        """Submit a job to fal.ai queue and return request_id."""
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                f"{self.BASE_URL}/{model_path}",
+                headers=self.headers,
+                json=payload,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return str(data.get("request_id", data.get("id")))
+
+    async def _poll(self, model_path: str, request_id: str) -> dict[str, Any]:
+        """Poll fal.ai queue until the job completes or times out."""
+        import asyncio
+
+        status_url = f"{self.BASE_URL}/{model_path}/requests/{request_id}/status"
+        result_url = f"{self.BASE_URL}/{model_path}/requests/{request_id}"
+
+        elapsed = 0.0
+        async with httpx.AsyncClient() as client:
+            while elapsed < self.timeout:
+                # Check status
+                resp = await client.get(status_url, headers=self.headers)
+                resp.raise_for_status()
+                status_data = resp.json()
+                status = status_data.get("status", "UNKNOWN")
+
+                if status == "COMPLETED":
+                    result_resp = await client.get(result_url, headers=self.headers)
+                    result_resp.raise_for_status()
+                    return result_resp.json()
+
+                if status in ("FAILED", "ERROR"):
+                    error_msg = status_data.get("error", "Unknown error")
+                    raise RuntimeError(f"fal.ai job failed: {error_msg}")
+
+                await asyncio.sleep(self.POLL_INTERVAL)
+                elapsed += self.POLL_INTERVAL
+
+        raise TimeoutError(f"fal.ai job timed out after {self.timeout}s")
+
+    async def generate_image(self, prompt: str, image_data: bytes | None = None, **kwargs: Any) -> str:
+        """Generate image using fal.ai SDXL + InstantID."""
+        if not self.api_key:
+            return "https://placehold.co/512x512?text=Mock+FalAI+Image"
+
+        mode = kwargs.get("mode", "hd")
+        model_path = self.preview_model_id if mode == "preview" else self.model_id
+
+        payload: dict[str, Any] = {"prompt": prompt}
+
+        if image_data is not None:
+            # For InstantID / image-to-image workflows, pass the source image as base64
+            b64_image = base64.b64encode(image_data).decode("utf-8")
+            mime = self._detect_mime(image_data)
+            payload["image"] = f"data:{mime};base64,{b64_image}"
+            # Additional InstantID-specific params
+            payload["identity_weight"] = kwargs.get("identity_weight", 0.8)
+            payload["prompt"] = prompt
+
+        # Some fal.ai models accept negative_prompt and other params
+        if "negative_prompt" in kwargs:
+            payload["negative_prompt"] = kwargs["negative_prompt"]
+        if "seed" in kwargs:
+            payload["seed"] = kwargs["seed"]
+        if "num_inference_steps" in kwargs:
+            payload["num_inference_steps"] = kwargs["num_inference_steps"]
+
+        request_id = await self._submit(model_path, payload)
+        result = await self._poll(model_path, request_id)
+
+        # fal.ai result typically has `images` list with URLs or base64
+        images = result.get("images", result.get("image", result.get("output", [])))
+        if isinstance(images, dict):
+            images = [images]
+        if not images:
+            raise ValueError("No images returned from fal.ai")
+
+        first = images[0]
+        if isinstance(first, dict):
+            url = first.get("url", first.get("image_url"))
+            if url:
+                return url
+            # Some models return base64
+            b64 = first.get("content", first.get("base64"))
+            if b64:
+                return f"data:image/png;base64,{b64}"
+        elif isinstance(first, str):
+            if first.startswith("http"):
+                return first
+            return f"data:image/png;base64,{first}"
+
+        raise ValueError(f"Unexpected fal.ai result format: {result}")
+
+    async def generate_text(self, prompt: str, **kwargs: Any) -> str:
+        """fal.ai is primarily for image generation; delegate to mock for text."""
+        return "[Mock] fal.ai does not support text generation. Use OpenAICompatibleProvider instead."
+
+    async def analyze_image(self, image_data: bytes, prompt: str, **kwargs: Any) -> str:
+        """fal.ai does not support vision analysis; delegate to mock."""
+        return json.dumps({
+            "face_shape": "oval",
+            "forehead_width": 14.2,
+            "cheekbone_width": 13.8,
+            "jawline_width": 11.5,
+            "face_length": 19.0,
+            "features": {"skin_tone": "medium", "eye_shape": "almond"},
+        })
+
+
+class AliyunProvider(OpenAICompatibleProvider):
+    """Aliyun (通义万相 / 通义千问) provider using OpenAI-compatible API."""
+
+    def __init__(self, api_key: str, base_url: str, text_model: str, image_model: str) -> None:
+        super().__init__(api_key=api_key, base_url=base_url, text_model=text_model, image_model=image_model)
+
+    async def generate_image(self, prompt: str, image_data: bytes | None = None, **kwargs: Any) -> str:
+        """Generate image using 通义万相 API."""
+        if not self.api_key:
+            return "https://placehold.co/512x512?text=Mock+Aliyun+Image"
+
+        # 通义万相 uses a task-based async API, but for MVP we use the synchronous compatible endpoint
+        # If image_data is provided, some aliyun models support image-to-image
+        payload = {
+            "model": self.image_model,
+            "prompt": prompt,
+        }
+        if image_data is not None:
+            b64_image = base64.b64encode(image_data).decode("utf-8")
+            payload["input"] = {"image": f"data:image/jpeg;base64,{b64_image}"}
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(
+                f"{self.base_url}/images/generations",
+                headers=self.headers,
+                json=payload,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data["output"]["results"][0]["url"]
+
+
+class VolcEngineProvider(OpenAICompatibleProvider):
+    """VolcEngine (豆包) provider using OpenAI-compatible API."""
+
+    def __init__(self, api_key: str, base_url: str, text_model: str, image_model: str) -> None:
+        super().__init__(api_key=api_key, base_url=base_url, text_model=text_model, image_model=image_model)
+
+
 class MockLLMProvider(LLMProvider):
     """Mock provider for development/testing without API keys."""
 
+    # A tiny 1x1 transparent PNG as data URI
+    _MOCK_IMAGE_DATA_URI = (
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+    )
+
     async def generate_image(self, prompt: str, image_data: bytes | None = None, **kwargs: Any) -> str:
-        return "https://placehold.co/512x512?text=Mock+Generated+Image"
+        return self._MOCK_IMAGE_DATA_URI
 
     async def generate_text(self, prompt: str, **kwargs: Any) -> str:
         return "[Mock] 这是一个模拟的 AI 生成文本。当前使用 MockLLMProvider。"
@@ -167,4 +347,29 @@ def get_llm_provider() -> LLMProvider:
             text_model=settings.llm_text_model,
             image_model=settings.llm_image_model,
         )
+
+    if provider == "falai":
+        return FalAIProvider(
+            api_key=settings.fal_api_key,
+            model_id=settings.fal_model_id,
+            preview_model_id=settings.fal_preview_model_id,
+            timeout=settings.fal_timeout_seconds,
+        )
+
+    if provider == "aliyun":
+        return AliyunProvider(
+            api_key=settings.aliyun_api_key,
+            base_url=settings.aliyun_base_url,
+            text_model=settings.aliyun_text_model,
+            image_model=settings.aliyun_image_model,
+        )
+
+    if provider == "volcengine":
+        return VolcEngineProvider(
+            api_key=settings.volcengine_api_key,
+            base_url=settings.volcengine_base_url,
+            text_model=settings.volcengine_text_model,
+            image_model=settings.volcengine_image_model,
+        )
+
     raise ValueError(f"Unknown LLM provider: {provider}")

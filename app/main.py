@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.database import Base, engine
 from app.middleware.error_handler import ErrorHandlerMiddleware
-from app.routers import comment, face, hairstyle, hairstyle_generate, health, upload
+from app.routers import comment, face, hairstyle, hairstyle_generate, health, tasks, upload
 
 
 def create_tables() -> None:
@@ -62,6 +62,7 @@ app.include_router(upload.router)
 app.include_router(face.router)
 app.include_router(hairstyle.router)
 app.include_router(hairstyle_generate.router)
+app.include_router(tasks.router)
 app.include_router(comment.router)
 
 

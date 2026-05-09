@@ -140,6 +140,7 @@ class GenerateHairstyleRequest(BaseModel):
     image_id: str
     hairstyle_id: str | None = None
     custom_prompt: str | None = None
+    mode: str = "hd"  # preview, hd
 
 
 class GenerateResultOut(BaseModel):
@@ -151,6 +152,32 @@ class GenerateResultOut(BaseModel):
     result_image_url: str
     status: str
     created_at: datetime
+
+
+class GenerateTaskOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    task_id: str
+    status: str  # pending, running, success, failed
+    result: GenerateResultOut | None = None
+    result_url: str | None = None
+    error_message: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+# ------------------------------
+# Task schemas
+# ------------------------------
+class TaskStatusOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    task_type: str
+    status: str
+    result_id: str | None = None
+    result_url: str | None = None
+    error_message: str | None = None
+    created_at: datetime
+    updated_at: datetime
 
 
 # ------------------------------

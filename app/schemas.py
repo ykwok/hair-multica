@@ -1,9 +1,8 @@
 """Pydantic schemas for request/response validation."""
 
+import json
 from datetime import datetime
 from typing import Any
-
-import json
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -101,14 +100,29 @@ class HairstyleBase(BaseModel):
     name: str
     category: str
     style: str | None = None
+    length: str | None = None
+    scene: str | None = None
     description: str | None = None
     cover_image_url: str | None = None
+    thumbnail_url: str | None = None
     tags: list[str] = Field(default_factory=list)
+    face_type_suitability: list[str] = Field(default_factory=list)
+    prompt_for_generation: str | None = None
     sort_order: int = 0
 
     @field_validator("tags", mode="before")
     @classmethod
     def _parse_tags(cls, v):
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return []
+        return v
+
+    @field_validator("face_type_suitability", mode="before")
+    @classmethod
+    def _parse_face_type_suitability(cls, v):
         if isinstance(v, str):
             try:
                 return json.loads(v)
@@ -156,10 +170,20 @@ class GenerateResultOut(BaseModel):
 # ------------------------------
 # AI comment schemas
 # ------------------------------
+class Scores(BaseModel):
+    face_match: int = Field(..., ge=1, le=10, description="脸型适配度")
+    hair_quality: int = Field(..., ge=1, le=10, description="发质匹配度")
+    style: int = Field(..., ge=1, le=10, description="风格气质匹配度")
+    emotion: int = Field(..., ge=1, le=10, description="情绪价值")
+    knowledge: int = Field(..., ge=1, le=10, description="专业冷知识")
+    humor: int = Field(..., ge=1, le=10, description="幽默互动")
+
+
 class AICommentRequest(BaseModel):
     image_id: str
     hairstyle_id: str | None = None
     hairstyle_info: str | None = None
+    personality_type: str = Field(default="warm_bestie", description="warm_bestie | sassy_stylist | knowledge_blogger")
 
 
 class AICommentOut(BaseModel):
@@ -167,7 +191,41 @@ class AICommentOut(BaseModel):
     id: str
     image_id: str
     hairstyle_id: str | None
+    personality: str | None
     comment_text: str
+    scores: dict[str, int] | None = None
     rating: int | None
+    highlights: list[str] | None = None
+    tip: str | None = None
     tags: list[str] | None = None
     created_at: datetime
+
+    @field_validator("scores", mode="before")
+    @classmethod
+    def _parse_scores(cls, v):
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return None
+        return v
+
+    @field_validator("highlights", mode="before")
+    @classmethod
+    def _parse_highlights(cls, v):
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return None
+        return v
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _parse_tags(cls, v):
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return None
+        return v

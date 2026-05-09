@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+    env_file:
+      - .env.production
+    restart: always
+
+# Note: In production, you might want to use a reverse proxy like Nginx or Caddy 
+# to handle HTTPS and serve static files from the uploads directory.

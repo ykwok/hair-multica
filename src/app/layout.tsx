@@ -4,6 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "发型宇宙 - AI 换发型",
   description: "看看其他发型的我，让 AI 造型师为你点评",
+  manifest: "/manifest.json",
   icons: {
     icon: "/favicon.ico",
   },

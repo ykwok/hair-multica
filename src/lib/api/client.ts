@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001/api";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
 
 interface ApiOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
@@ -15,6 +15,17 @@ class ApiError extends Error {
   }
 }
 
+interface ApiResponse<T> {
+  success: boolean;
+  data: T | null;
+  meta?: {
+    page?: number;
+    per_page?: number;
+    total?: number;
+  } | null;
+  error?: { code: string; message: string; details?: unknown } | null;
+}
+
 async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const { params, ...init } = options;
   let url = `${API_BASE}${path}`;
@@ -27,10 +38,12 @@ async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
     if (search.toString()) url += `?${search.toString()}`;
   }
 
+  const isFormData = init.body instanceof FormData;
+
   const response = await fetch(url, {
     ...init,
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...init.headers,
     },
   });
@@ -49,7 +62,17 @@ async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
     return undefined as T;
   }
 
-  return response.json() as Promise<T>;
+  const json = (await response.json()) as ApiResponse<T>;
+
+  if (json.success === false) {
+    throw new ApiError(
+      json.error?.message || "请求失败",
+      response.status,
+      json.error
+    );
+  }
+
+  return json.data as T;
 }
 
 export const api = {
@@ -58,7 +81,7 @@ export const api = {
     request<T>(path, {
       ...options,
       method: "POST",
-      body: body ? JSON.stringify(body) : undefined,
+      body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
     }),
   put: <T>(path: string, body?: unknown, options?: ApiOptions) =>
     request<T>(path, {

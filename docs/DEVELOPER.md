@@ -8,82 +8,84 @@
 
 ### 1.1 后端（FastAPI）
 
-**前置条件**：Python 3.11、PostgreSQL 15（含 pgvector 扩展）、Docker（可选）
-
-#### 方式 A：纯本地启动
+**前置条件**：Python 3.10+
 
 ```bash
-cd transcript_maximizer
-
 # 1. 创建虚拟环境
 python -m venv venv
 source venv/bin/activate
 
-# 2. 安装依赖
-pip install -r requirements.txt
+# 2. 安装依赖（含开发依赖）
+pip install -e ".[dev]"
 
-# 3. 配置环境变量
+# 3. 配置环境变量（可选，默认 Mock Provider）
 cp .env.example .env
 # 编辑 .env：
-#   DATABASE_URL=postgresql://postgres:postgres@localhost:5432/transcript_maximizer
-#   OPENAI_API_KEY=sk-...
+#   LLM_PROVIDER=mock
+#   LLM_API_KEY=sk-...          # 使用真实 LLM 时必填
+#   DATABASE_URL=sqlite:///./data/hair_multica.db
 
-# 4. 启动 PostgreSQL（如未安装，可用 Docker 临时启动）
-docker run -d --name pg-dev \
-  -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=transcript_maximizer \
-  -p 5432:5432 \
-  ankane/pgvector:latest
-
-# 5. 执行数据库迁移
-alembic upgrade head
-
-# 6. 启动服务
+# 4. 启动服务
 uvicorn app.main:app --reload --port 8000
 ```
 
 服务启动后：
 - API 根地址：`http://localhost:8000`
 - Swagger UI：`http://localhost:8000/docs`
-- ReDoc：`http://localhost:8000/redoc`
+- 健康检查：`http://localhost:8000/api/health`
 
-#### 方式 B：Docker Compose（推荐）
+#### 数据库说明
+
+默认使用 **SQLite**（`sqlite:///./data/hair_multica.db`），无需额外安装。如需切换至 PostgreSQL：
 
 ```bash
-cd transcript_maximizer
-export OPENAI_API_KEY="sk-..."
-docker-compose up --build
+# .env
+DATABASE_URL=postgresql://user:password@localhost:5432/hair_multica
 ```
 
-此方式会自动拉起 PostgreSQL + pgvector 容器，且后端代码通过 volume 挂载，修改后自动热重载。
+> 注意：本项目**未使用 Alembic**。数据库表结构由 `app/main.py` 中的 `Base.metadata.create_all(bind=engine)` 在启动时自动创建。如需迁移工具，可参考下方「添加 Alembic 迁移」扩展指南。
 
-### 1.2 前端（React + Vite）
+### 1.2 前端（Next.js）
 
-**前置条件**：Node.js 20+、npm 或 pnpm
+**前置条件**：Node.js 20+、pnpm
 
 ```bash
-cd frontend
-
 # 1. 安装依赖
-npm install
+pnpm install
 
 # 2. 配置环境变量
 cp .env.example .env.local
 # 编辑 .env.local：
-#   VITE_API_BASE_URL=http://localhost:8000
+#   NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
 
 # 3. 启动开发服务器
-npm run dev
+pnpm dev
 ```
 
-开发服务器默认运行在 `http://localhost:5173`，代理配置在 `vite.config.ts` 中。
+前端开发服务器默认运行在 `http://localhost:3000`。
 
-### 1.3 前端对接真实后端
+### 1.3 项目结构速览
 
-当前 `src/lib/api.ts` 使用内存 mock 数据。切换为真实 API 的步骤：
-1. 将 `apiClient` 中的 mock 实现替换为 `axios` 实例
-2. 确保 `VITE_API_BASE_URL` 指向运行中的后端地址
-3. 统一响应拦截器处理 `StandardResponse` 格式：`response.data.data`
+```
+app/                    # 后端 FastAPI
+├── main.py             # 应用入口（路由注册、中间件、静态文件挂载）
+├── config.py           # Pydantic Settings（.env 加载）
+├── models.py           # SQLAlchemy ORM（7 个实体）
+├── schemas.py          # Pydantic 请求/响应模型
+├── database.py         # 引擎、Session、Base
+├── middleware/         # 全局错误处理中间件
+├── routers/            # API 路由（7 个模块）
+└── services/           # 业务服务（LLM / Storage / TaskManager）
+
+src/                    # 前端 Next.js App Router
+├── app/                # 页面路由（page.tsx / layout.tsx）
+├── components/         # React 组件（UI / 业务 / 布局）
+└── lib/                # 工具函数、状态管理、API 封装
+
+tests/                  # pytest 测试
+├── conftest.py         # fixtures（内存 SQLite + Mock Provider）
+└── test_*.py           # 各模块测试用例
+```
 
 ---
 
@@ -92,267 +94,414 @@ npm run dev
 ### 2.1 后端测试（pytest）
 
 ```bash
-cd transcript_maximizer
-
 # 运行全部测试
 pytest
 
 # 运行指定模块
-pytest tests/test_transcripts.py
-pytest tests/test_pipelines.py
-pytest tests/test_content.py
+pytest tests/test_upload.py
+pytest tests/test_face.py
+pytest tests/test_hairstyles.py
+pytest tests/test_generate.py
+pytest tests/test_comment.py
+pytest tests/test_health.py
 
-# 带覆盖率报告
+# 带详细输出
+pytest -v
+
+# 带覆盖率（需安装 pytest-cov）
 pytest --cov=app --cov-report=term-missing
 ```
 
-当前测试集共 **17 条用例**，覆盖：
-- 录音稿 CRUD（上传/列表/详情/更新/删除）
-- 三个 AI Pipeline（社媒/Skill/课程）的 mock 调用链路
-- Skill 去重合并的完整闭环验证
-- 内容管理接口（社媒列表/Skill 筛选/课程详情）
-
-覆盖率：**78%**
+当前测试集共 **18 条用例**，覆盖：
+- 图片上传（成功 / 非法类型 / 超大文件）
+- 脸型分析（上传后分析、缓存返回）
+- 发型库列表（分页、分类筛选、长度筛选、场景筛选、脸型适配、关键词搜索、组合筛选）
+- AI 换发与任务轮询（创建任务、preview 模式、图片不存在、任务不存在）
+- AI 点评（基础点评、三种人格、指定发型 ID、图片不存在）
+- 健康检查
 
 ### 2.2 测试配置说明
 
-`pytest.ini` 关键项：
+`tests/conftest.py` 关键配置：
 
-```ini
-[pytest]
-asyncio_mode = auto
-testpaths = tests
+```python
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"   # 内存数据库
+os.environ["STORAGE_LOCAL_PATH"] = tempfile.mkdtemp()  # 临时上传目录
+os.environ["STORAGE_BASE_URL"] = "http://localhost:8000/uploads"
+os.environ["LLM_PROVIDER"] = "mock"                  # Mock LLM，无需 API Key
 ```
 
-测试使用 `sqlite` + 内存模式作为测试数据库（`tests/conftest.py` 中配置），无需真实 PostgreSQL 即可运行。
+测试使用内存 SQLite，每次测试函数独立创建/销毁表结构，互不干扰。
 
-### 2.3 前端测试（jest）
+### 2.3 前端代码检查
 
 ```bash
-cd frontend
+# ESLint
+pnpm lint
+pnpm lint:fix
 
-# 运行全部测试
-npm run test
+# Prettier
+pnpm format
+pnpm format:check
 
-# 运行一次（CI 模式）
-npm run test -- --run
-
-# 带覆盖率
-npm run test -- --coverage
+# TypeScript 类型检查
+pnpm type-check
 ```
 
-> 当前前端项目尚未编写 UI 测试，建议在后续迭代中为关键页面（上传、Pipeline 触发）补充 `React Testing Library` 用例。
+> 当前前端项目尚未编写 UI 测试，建议在后续迭代中为关键交互（上传裁剪、生成轮询、分享卡片）补充 Playwright 或 React Testing Library 用例。
 
 ---
 
-## 3. AI Pipeline 的 Prompt 调优指南
+## 3. LLM Provider 配置与 Prompt 调优
 
-系统三条工作流的核心质量取决于 LLM System Prompt 的设计。Prompt 文件位于后端 `app/services/` 目录下。
+### 3.1 支持的 LLM Provider
 
-### 3.1 社媒生成 Pipeline
+在 `.env` 中通过 `LLM_PROVIDER` 切换：
 
-**文件**：`app/services/pipeline_social_media.py`
+| Provider | `LLM_PROVIDER` 值 | 适用场景 | 配置项 |
+|----------|-------------------|----------|--------|
+| Mock | `mock` | 开发测试，无 API Key | 无需配置 |
+| OpenAI / OpenAI-Compatible | `openai` / `openai_compatible` | 通用文本/图像/多模态 | `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_TEXT_MODEL`, `LLM_VISION_MODEL`, `LLM_IMAGE_MODEL` |
+| fal.ai | `falai` | SDXL + InstantID 高质量换发 | `FAL_API_KEY`, `FAL_MODEL_ID`, `FAL_PREVIEW_MODEL_ID` |
+| 阿里云（通义万相） | `aliyun` | 中文图像生成 | `ALIYUN_API_KEY`, `ALIYUN_BASE_URL`, `ALIYUN_IMAGE_MODEL`, `ALIYUN_TEXT_MODEL` |
+| 火山引擎（豆包） | `volcengine` | 图像生成 | `VOLCENGINE_API_KEY`, `VOLCENGINE_BASE_URL`, `VOLCENGINE_IMAGE_MODEL`, `VOLCENGINE_TEXT_MODEL` |
+| DashScope | `dashscope` | Qwen2-VL 多模态 | `LLM_API_KEY`（复用） |
 
-涉及两个 Prompt：
+### 3.2 配置示例
 
-| Prompt 常量 | 作用 | 调优方向 |
-|-------------|------|----------|
-| `SYSTEM_PROMPT_INSIGHT` | 从录音中提取高价值洞察 | 调整评分标准（当前 ≥3 分保留）、增加/删除关注的知识点类别 |
-| `SYSTEM_PROMPT_XIAOHONGSHU` | 基于洞察生成小红书草稿 | 修改语气风格（更专业 / 更活泼）、调整标签数量、增加平台适配（如抖音/公众号） |
+```bash
+# .env — 使用 OpenAI
+LLM_PROVIDER=openai
+LLM_API_KEY=sk-...
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_TEXT_MODEL=gpt-4o
+LLM_VISION_MODEL=gpt-4o
+LLM_IMAGE_MODEL=dall-e-3
 
-**示例：增加抖音风格适配**
+# .env — 使用 fal.ai 换发（推荐）
+LLM_PROVIDER=falai
+FAL_API_KEY=...
+FAL_MODEL_ID=fal-ai/instant-id
+FAL_PREVIEW_MODEL_ID=fal-ai/fast-sdxl
+FAL_TIMEOUT_SECONDS=120
 
-在 `SYSTEM_PROMPT_XIAOHONGSHU` 中追加：
-```python
-"""
-- 如指定 platform="douyin"，标题需控制在 20 字以内，节奏更快，多用反问句和悬念。
-"""
+# .env — 使用阿里云
+LLM_PROVIDER=aliyun
+ALIYUN_API_KEY=sk-...
+ALIYUN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+ALIYUN_IMAGE_MODEL=wanx-v1
+ALIYUN_TEXT_MODEL=qwen-vl-max
 ```
 
-然后在 `schemas.py` 的 `PipelineSocialMediaInput` 中增加 `platform` 字段，并在路由层透传。
+### 3.3 Prompt 调优
 
-### 3.2 Skill 提取 Pipeline
+#### 脸型分析 Prompt
 
-**文件**：`app/services/pipeline_skills.py`
+**文件**：`app/routers/face.py`
 
-**Prompt 常量**：`SYSTEM_PROMPT_SKILLS`
+```python
+ANALYSIS_PROMPT = (
+    "请分析这张人脸照片，返回严格的 JSON 格式结果..."
+)
+```
 
 调优方向：
-- **视角扩展**：当前仅 `interviewer` / `candidate`，可新增 `hr`、`mentor` 等视角
-- **范式修改**：当前为 `[场景]-[动作]-[预期结果]`，可扩展为 `[场景]-[动作]-[预期结果]-[常见错误]`
-- **泛化规则**：在 Prompt 中追加更多需去除的隐私信息类型（如学校名、项目名）
+- 增加/删除分析的面部维度（如增加「眉毛形状」「鼻梁高度」）
+- 修改输出 JSON 的字段结构
+- 调整 `max_tokens` 限制
 
-**去重阈值调整**：
+**注意**：修改 JSON 输出结构后，需同步更新 `app/schemas.py` 中的 `FaceAnalysisOut` 和 `tests/test_face.py` 中的断言。
 
-在 `run_skills_pipeline` 中修改 `threshold`：
+#### AI 点评 Prompt
+
+**文件**：`app/routers/comment.py`
+
+涉及三个 System Prompt：
+
+| 人格 | Prompt Key | 调优方向 |
+|------|-----------|----------|
+| 温柔闺蜜 | `warm_bestie` | 调整亲切称呼、emoji 使用频率、建议语气 |
+| 毒舌造型师 | `sassy_stylist` | 调整犀利程度、幽默风格、吐槽边界 |
+| 知识型博主 | `knowledge_blogger` | 调整专业深度、引用来源、术语密度 |
+
+**六维评分调整**：
+
+在 `_SCORE_DIMENSIONS` 列表中增删维度：
+
 ```python
-similar_ids = await find_similar_skill_entries(db, skill.id, threshold=0.90)  # 更严格
+_SCORE_DIMENSIONS = [
+    ("face_match", "脸型适配度", "..."),
+    ("hair_quality", "发质匹配度", "..."),
+    # 新增维度
+    ("color_match", "发色适配度", "评估该发色对用户肤色的适配性"),
+]
 ```
 
-### 3.3 课程生成 Pipeline
+修改后需同步更新：
+- `app/schemas.py` 中的 `Scores` 模型
+- `src/lib/store.ts` 中的 `RadarScores` 类型
+- `tests/test_comment.py` 中的 mock 数据
 
-**文件**：`app/services/pipeline_course.py`
+#### 换发生成 Prompt
 
-涉及两个 Prompt：
+**文件**：`app/services/task_manager.py`
 
-| Prompt 常量 | 作用 | 调优方向 |
-|-------------|------|----------|
-| `SYSTEM_PROMPT_OUTLINE` | 基于聚类主题生成课程大纲 | 调整课时数量（当前 8–10 节）、增加受众细分（如「文科生专场」）、修改递进关系要求 |
-| `SYSTEM_PROMPT_LESSON_CONTENT` | 基于大纲生成逐字讲义 | 调整口语化程度、增加案例数量要求、追加「课堂互动环节」输出 |
-
-**聚类参数调整**：
-
-在 `_cluster_fragments()` 中：
 ```python
-n_clusters = min(max(3, len(fragments) // 5), 10, len(fragments))
-# 可修改为按主题密度自适应，如：
-# n_clusters = min(max(5, len(fragments) // 8), 12, len(fragments))
+prompt = "基于用户上传的照片，生成一张 AI 换发型后的效果图。..."
 ```
+
+调优方向：
+- 修改保留面部特征的约束强度
+- 增加风格描述（如 "studio lighting, realistic photography"）
+- 针对特定 Provider 调整 Prompt（fal.ai 的 InstantID 对 Prompt 格式较敏感）
 
 ### 3.4 Prompt 调优的验证流程
 
 1. **修改 Prompt 文本**
-2. **更新 mock 测试数据**（`tests/test_pipelines.py` 中的 `mock_insight`、`mock_drafts`、`mock_skills`、`mock_outline` 等），确保与 Prompt 要求的 JSON Schema 一致
-3. **运行测试**：`pytest tests/test_pipelines.py`
-4. **手动端到端验证**：启动服务后，通过 Swagger UI 或前端触发真实 Pipeline，检查输出质量
-5. **记录版本**：建议将 Prompt 的变更记录到 `docs/CHANGELOG.md`，标注修改日期、修改人、效果评估
-
-> **注意**：Prompt 调整后务必同步更新 mock 测试，否则会导致测试失败（mock 返回的 JSON key 与实际 Prompt 要求的不匹配）。
+2. **更新 mock 测试数据**（`tests/` 中对应模块的 mock 返回值）
+3. **运行测试**：`pytest tests/test_xxx.py`
+4. **手动端到端验证**：启动服务后，通过 Swagger UI 或前端触发真实调用
+5. **记录版本**：建议将 Prompt 变更记录到版本控制提交信息中
 
 ---
 
-## 4. 数据库迁移操作（Alembic）
+## 4. 数据库操作
 
-### 4.1 常用命令
+### 4.1 当前机制（无 Alembic）
 
-```bash
-cd transcript_maximizer
+本项目使用 SQLAlchemy 的 `Base.metadata.create_all()` 在应用启动时自动建表。适合快速迭代，但不支持增量迁移。
 
-# 升级到最新版本
-alembic upgrade head
-
-# 降级一个版本
-alembic downgrade -1
-
-# 查看当前版本
-alembic current
-
-# 查看历史版本
-alembic history --verbose
-
-# 生成新迁移脚本（修改 models.py 后执行）
-alembic revision --autogenerate -m "新增 xxx 表"
-```
-
-### 4.2 新增实体时的标准流程
-
-1. 在 `app/models.py` 中定义新的 SQLAlchemy Model
-2. 在 `app/schemas.py` 中定义对应的 Pydantic Schema
-3. 生成迁移脚本：`alembic revision --autogenerate -m "新增 xxx 表"`
-4. 检查生成的迁移脚本（`alembic/versions/xxx_新增_xxx_表.py`），确认 `upgrade()` 和 `downgrade()` 正确
-5. 执行迁移：`alembic upgrade head`
-6. 在 `app/routers/` 中新增路由或在现有路由中暴露新实体的 CRUD 接口
-7. 补充 pytest 用例
-
-### 4.3 pgvector 向量字段注意事项
-
-- 生产环境使用 `pgvector` 的 `VECTOR(dim)` 类型（dim=1536，对应 `text-embedding-3-small`）
-- 测试环境（SQLite）使用 `models.py` 中自定义的 `Vector` fallback 类型，以 JSON 字符串形式存储
-- 迁移脚本中，向量字段在 Alembic 里声明为 `sa.Text`，实际由 `pgvector` 扩展处理
-
----
-
-## 5. 添加新工作流的扩展指南
-
-若需新增第 4 条 AI Pipeline（例如：生成面试题库、产出图文长文），按以下步骤扩展：
-
-### 5.1 后端扩展
-
-#### 步骤 1：实现 Pipeline 服务
-
-在 `app/services/` 下新建文件，例如 `pipeline_interview_questions.py`：
+**自动建表逻辑**（`app/main.py`）：
 
 ```python
-from sqlalchemy.orm import Session
-from app.models import RecordingTranscript, ProcessingStatus
-from app.services.llm_client import chat_completion_json
-
-SYSTEM_PROMPT = """你是一位面试题库专家..."""
-
-async def run_interview_questions_pipeline(db: Session, transcript: RecordingTranscript):
-    # 1. 预处理
-    # 2. LLM 调用
-    # 3. 结果存储
-    # 4. 状态更新
-    pass
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    create_tables()  # Base.metadata.create_all(bind=engine)
+    yield
 ```
 
-#### 步骤 2：定义请求/响应 Schema
+### 4.2 手动管理数据库
+
+```bash
+# 查看表结构（SQLite）
+sqlite3 ./data/hair_multica.db ".schema"
+
+# 清空数据（开发调试）
+rm ./data/hair_multica.db
+# 重启服务后自动重建表
+
+# 查看数据
+sqlite3 ./data/hair_multica.db "SELECT id, name, category FROM hairstyles LIMIT 5;"
+```
+
+### 4.3 添加 Alembic 迁移（扩展）
+
+如需正式迁移管理，可按以下步骤添加 Alembic：
+
+```bash
+# 1. 安装
+pip install alembic
+
+# 2. 初始化
+alembic init alembic
+
+# 3. 配置 alembic.ini 和 alembic/env.py，指向 app.database.engine
+
+# 4. 生成初始迁移
+alembic revision --autogenerate -m "init"
+
+# 5. 后续修改 models.py 后
+alembic revision --autogenerate -m "add xxx"
+alembic upgrade head
+```
+
+---
+
+## 5. 添加新功能扩展指南
+
+### 5.1 后端扩展：新增 API 接口
+
+以「新增发色推荐接口」为例：
+
+#### 步骤 1：定义数据模型
+
+在 `app/models.py` 中追加：
+
+```python
+class HairColor(Base):
+    __tablename__ = "hair_colors"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    name = Column(String(128), nullable=False)
+    hex_code = Column(String(7), nullable=False)
+    skin_tone_match = Column(Text, nullable=True)  # JSON
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+```
+
+#### 步骤 2：定义 Schema
 
 在 `app/schemas.py` 中追加：
 
 ```python
-class PipelineInterviewQuestionsInput(BaseModel):
-    transcript_id: uuid.UUID
-
-class InterviewQuestionItem(BaseModel):
-    question: str
-    answer_reference: str
-    difficulty: str
-
-class InterviewQuestionsResult(BaseModel):
-    questions: List[InterviewQuestionItem]
+class HairColorOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    name: str
+    hex_code: str
+    skin_tone_match: list[str] | None = None
+    created_at: datetime
 ```
 
-#### 步骤 3：注册路由
+#### 步骤 3：实现路由
 
-在 `app/routers/pipelines.py` 中追加：
+新建 `app/routers/hair_color.py`：
 
 ```python
-from app.services.pipeline_interview_questions import run_interview_questions_pipeline
-from app.schemas import PipelineInterviewQuestionsInput, InterviewQuestionsResult
+from fastapi import APIRouter
+from app.schemas import HairColorOut, success_response
 
-@router.post("/interview-questions", response_model=StandardResponse)
-async def pipeline_interview_questions(payload: PipelineInterviewQuestionsInput, db: Session = Depends(get_db)):
-    # 参照现有 pipeline 路由实现异常处理与状态校验
-    ...
+router = APIRouter(prefix="/api/v1", tags=["Hair Colors"])
+
+@router.get("/hair-colors")
+async def list_hair_colors() -> dict:
+    # 实现查询逻辑
+    return success_response(data=[])
 ```
 
-#### 步骤 4：补充测试
+#### 步骤 4：注册路由
 
-在 `tests/test_pipelines.py` 中追加 mock 测试用例，验证 JSON 解析、状态流转、数据落库。
+在 `app/main.py` 中导入并注册：
 
-### 5.2 前端扩展
+```python
+from app.routers import hair_color
+app.include_router(hair_color.router)
+```
 
-#### 步骤 1：新增 API 封装
+#### 步骤 5：补充测试
 
-在 `src/lib/api.ts` 中追加：
+新建 `tests/test_hair_color.py`：
 
-```typescript
-export async function generateInterviewQuestions(transcriptId: string) {
-  // 当前 mock 实现
-  // 后端就绪后替换为真实 fetch/axios 调用
+```python
+def test_list_hair_colors(client):
+    response = client.get("/api/v1/hair-colors")
+    assert response.status_code == 200
+```
+
+#### 步骤 6：重启服务
+
+```bash
+uvicorn app.main:app --reload
+```
+
+> 由于使用 `create_all()` 自动建表，新增模型会在重启时自动创建对应表。如使用已有数据库文件，需先删除 `.db` 文件或手动添加表。
+
+### 5.2 前端扩展：新增页面
+
+以「新增发色推荐页」为例：
+
+#### 步骤 1：创建页面
+
+新建 `src/app/hair-colors/page.tsx`：
+
+```tsx
+"use client";
+import { MobileLayout } from "@/components/layout/mobile-layout";
+
+export default function HairColorsPage() {
+  return (
+    <MobileLayout>
+      <div className="p-4">
+        <h1 className="text-xl font-bold">发色推荐</h1>
+      </div>
+    </MobileLayout>
+  );
 }
 ```
 
-#### 步骤 2：新增页面或弹窗
+#### 步骤 2：添加 API 类型
 
-根据功能复杂度选择：
-- 简单结果展示：在 **录音稿详情页** 新增按钮 + 弹窗
-- 独立管理模块：参照 `SocialMedia.tsx` / `Skills.tsx` 新建页面组件，并在 `Layout.tsx` 侧边栏注册路由
+在 `src/lib/api/types.ts` 中追加：
 
-#### 步骤 3：更新类型定义
+```typescript
+export interface HairColor {
+  id: string;
+  name: string;
+  hex_code: string;
+}
+```
 
-在 `src/lib/types.ts` 中追加新实体的 TypeScript interface。
+#### 步骤 3：调用 API
 
-### 5.3 部署扩展
+```typescript
+import { api } from "@/lib/api/client";
+const colors = await api.get<HairColor[]>("/hair-colors");
+```
 
-- 若新 Pipeline 依赖额外的 Python 包，更新 `transcript_maximizer/requirements.txt`
-- 若需要新增环境变量，同步更新：
-  - `app/config.py`
-  - `.env.example`
-  - `DEPLOYMENT.md` 中的环境变量清单表
-- 若需要新增数据表，执行 Alembic 迁移流程（见第 4 节）
+#### 步骤 4：添加导航入口
+
+在需要的位置（如首页或底部导航）添加链接：
+
+```tsx
+import Link from "next/link";
+<Link href="/hair-colors">发色推荐</Link>
+```
+
+### 5.3 添加新的 LLM Provider
+
+以「新增某国产大模型 Provider」为例：
+
+#### 步骤 1：实现 Provider 类
+
+在 `app/services/llm.py` 中继承 `LLMProvider`：
+
+```python
+class NewProvider(LLMProvider):
+    def __init__(self, api_key: str, base_url: str, ...) -> None:
+        self.api_key = api_key
+        ...
+
+    async def generate_image(self, prompt: str, image_data: bytes | None = None, **kwargs: Any) -> str:
+        # 实现图像生成
+        ...
+
+    async def generate_text(self, prompt: str, **kwargs: Any) -> str:
+        # 实现文本生成
+        ...
+
+    async def analyze_image(self, image_data: bytes, prompt: str, **kwargs: Any) -> str:
+        # 实现图像分析
+        ...
+
+    async def generate_text_with_images(self, prompt: str, images: list[bytes | str], **kwargs: Any) -> str:
+        # 实现多模态生成
+        ...
+```
+
+#### 步骤 2：注册到工厂函数
+
+在 `get_llm_provider()` 中追加：
+
+```python
+if provider == "newprovider":
+    return NewProvider(
+        api_key=settings.llm_api_key,
+        base_url=settings.llm_base_url,
+        ...
+    )
+```
+
+#### 步骤 3：添加配置项
+
+在 `app/config.py` 的 `Settings` 中追加：
+
+```python
+newprovider_api_key: str = ""
+newprovider_base_url: str = ""
+```
+
+#### 步骤 4：更新环境变量文档
+
+在 `.env.example` 和本文档中补充新 Provider 的配置说明。
 
 ---
 
@@ -361,30 +510,44 @@ export async function generateInterviewQuestions(transcriptId: string) {
 ### 查看后端日志
 
 ```bash
-# Docker 模式
-docker-compose logs -f backend
-
-# 本地模式
+# 本地启动
 uvicorn app.main:app --reload --log-level debug
+
+# 查看请求日志（已内置于 app/main.py）
+# 每条请求会自动输出：METHOD PATH - STATUS - DURATION
 ```
 
-### 直接调用 API 测试 Pipeline
+### 直接调用 API 测试
 
 ```bash
-# 先上传一篇录音稿，拿到 transcript_id
-curl -X POST "http://localhost:8000/api/v1/pipeline/social-media" \
+# 上传图片
+curl -X POST "http://localhost:8000/api/v1/upload" -F "file=@photo.jpg"
+
+# 脸型分析
+curl -X POST "http://localhost:8000/api/v1/analyze-face" \
   -H "Content-Type: application/json" \
-  -d '{"transcript_id": "<uuid>"}' | jq .
+  -d '{"image_id": "xxx"}'
+
+# 查询任务
+curl "http://localhost:8000/api/v1/tasks/xxx"
 ```
 
 ### 检查数据库内容
 
 ```bash
-docker-compose exec postgres psql -U appuser -d audioprofit -c "SELECT id, title, status FROM recording_transcripts ORDER BY created_at DESC LIMIT 5;"
+# SQLite
+sqlite3 ./data/hair_multica.db "SELECT id, status, task_type FROM generation_tasks ORDER BY created_at DESC LIMIT 5;"
+
+# 查看图片记录
+sqlite3 ./data/hair_multica.db "SELECT id, original_filename, storage_url FROM images ORDER BY created_at DESC LIMIT 5;"
 ```
 
-### 检查向量相似度
+### 检查本地上传文件
 
 ```bash
-docker-compose exec postgres psql -U appuser -d audioprofit -c "SELECT id, scenario, 1 - (embedding <=> (SELECT embedding FROM skill_entries LIMIT 1)) AS similarity FROM skill_entries LIMIT 5;"
+ls -la ./uploads/$(date +%Y/%m/%d)
 ```
+
+### 切换 Mock Provider 快速测试
+
+无需配置任何 API Key，将 `.env` 中 `LLM_PROVIDER=mock`，所有 LLM 调用会返回预设的模拟数据，适合前端联调和接口测试。

@@ -318,6 +318,39 @@ docker-compose exec postgres pg_dump -U appuser audioprofit > backup_$(date +%Y%
 
 ---
 
+## 激活 CI 流水线
+
+> 当前 CI 工作流文件以 `.github/ci.yml.disabled` 形式入库，**尚未激活**。原因如下：
+>
+> GitHub OAuth App 的授权 token 缺少 `workflow` scope，导致 agent 无法直接创建或修改 `.github/workflows/` 目录下的文件。这是 GitHub 的安全限制，防止未授权应用篡改仓库的 Actions 工作流。
+
+### 手动激活步骤
+
+```bash
+# 1. 将 disabled 文件重命名为正式工作流路径
+mv .github/ci.yml.disabled .github/workflows/ci.yml
+
+# 2. 提交并推送
+git add .github/workflows/ci.yml
+git commit -m "ci: activate GitHub Actions workflow"
+git push origin <your-branch>
+```
+
+推送后，进入 GitHub 仓库页面的 **Actions** 标签页即可看到流水线已启用。
+
+### 由 Multica agent 自动推送（推荐）
+
+如需 DevOpsAgent 或其他 agent 后续能直接维护 `.github/workflows/` 下的文件，请 workspace owner 执行以下操作：
+
+1. 打开 GitHub 仓库所属 Organization / User 的 **Settings → Developer settings → OAuth Apps**
+2. 找到当前 Multica workspace 使用的 OAuth App
+3. 在 **Permissions** 中增加 `workflow` scope（或勾选 "Update GitHub Action workflows"）
+4. 保存后，agent 即可正常推送 workflow 文件
+
+> **注意**：增加 `workflow` scope 后，agent 将具备修改仓库 Actions 的权限。建议仅对受信任的 workspace 开启，并配合分支保护规则使用。
+
+---
+
 ## 故障排查
 
 ### 服务无法启动
@@ -362,6 +395,6 @@ docker builder prune -f
 | `.env.example` | 环境变量模板 |
 | `backend/Dockerfile` | 后端多阶段构建 |
 | `frontend/Dockerfile` | 前端多阶段构建 |
-| `.github/workflows/ci.yml` | CI/CD 流水线 |
+| `.github/ci.yml.disabled` | CI/CD 流水线（需重命名为 `.github/workflows/ci.yml` 激活） |
 | `scripts/entrypoint.sh` | 后端启动入口（含自动迁移） |
 | `scripts/init-db.sh` | 数据库初始化脚本 |
